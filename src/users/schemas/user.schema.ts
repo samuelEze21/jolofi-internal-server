@@ -13,11 +13,20 @@ export class User extends Document {
   verificationCode?: string;
 
   @Prop({default: Date.now})
-    createdAt: Date;
+  createdAt: Date;
 
-    @Prop({default: Date.now})
-    updatedAt: Date;
+  @Prop({default: Date.now})
+  updatedAt: Date;
 
+  @Prop({ select: false })
+  password?: string;
+
+  @Prop({ required: false, unique: true })
+  username?: string;  
+
+  @Prop()
+  suiWalletAddress?: string;
+  
 }
 
 
