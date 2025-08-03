@@ -1,8 +1,8 @@
- import { IsEmail, IsPhoneNumber, IsOptional, ValidateIf } from 'class-validator';
+import { IsEmail, IsPhoneNumber, IsOptional, ValidateIf } from 'class-validator';
 
 export class RegisterDto {
   @ValidateIf(o => o.email === undefined)
-  @IsPhoneNumber(null)
+  @IsPhoneNumber(undefined, { message: 'Invalid phone number' })
   phone?: string;
 
   @ValidateIf(o => o.phone === undefined)
