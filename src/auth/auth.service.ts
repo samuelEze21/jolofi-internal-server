@@ -1,115 +1,127 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { User } from '../users/schemas/user.schema';
 import { Model } from 'mongoose';
 import { JwtService } from '@nestjs/jwt';
-import { RegisterDto } from './dto/register.dto';
-import { LoginDto } from './dto/login.dto';
-import { CompleteProfileDto } from '../auth/dto/complete-profile.dto';
 import * as bcrypt from 'bcrypt';
 
+import { User, UserDocument } from '../users/schemas/user.schema';
+import { RegisterDto } from './dto/register.dto';
+import { VerifyDto } from './dto/verify.dto';
+import { CompleteProfileDto } from './dto/complete-profile.dto';
+import { LoginDto } from './dto/login.dto';
+import { TwilioService } from '../auth/twilio/twilio.service';
+import { WalletService } from '../wallet/wallet.service';
 
 @Injectable()
 export class AuthService {
   constructor(
-    @InjectModel(User.name) private userModel: Model<User>,
-    private jwtService: JwtService
+    @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+    private readonly jwtService: JwtService,
+    private readonly twilioService: TwilioService,
+    private readonly walletService: WalletService,
   ) {}
 
-  async register(dto: RegisterDto) {
-    const identifier = dto.email ?? dto.phone;
+  async register(dto: RegisterDto): Promise<{ message: string }> {
+    const identifier = dto.email || dto.phone;
+    const channel = dto.phone ? 'sms' : 'email';
 
-    let user = await this.userModel.findOne({ identifier });
-    if (user) throw new UnauthorizedException('User already exists');
+    if (!identifier) throw new BadRequestException('Email or phone is required');
 
-    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-    user = new this.userModel({
-      identifier,
-      verificationCode: verificationCode,
-      isVerified: false,
+    const existingUser = await this.userModel.findOne({
+      $or: [{ email: dto.email }, { phone: dto.phone }],
+    });
+    if (existingUser) throw new ConflictException('User already exists');
+
+    await this.twilioService.sendVerificationCode(identifier, channel);
+
+    return { message: `Verification code sent to ${identifier}` };
+  }
+
+  async verifyOtp(dto: VerifyDto) {
+    const { identifier, code } = dto;
+
+    const result: { status?: string; [key: string]: any } = await this.twilioService.verifyCode(identifier, code);
+
+    let user = await this.userModel.findOne({
+      $or: [{ phone: identifier }, { email: identifier }],
     });
 
-    await user.save();
+    if (!user) {
+      user = new this.userModel({
+        identifier,
+        phone: /^\d+$/.test(identifier) ? identifier : undefined,
+        email: identifier.includes('@') ? identifier : undefined,
+        isVerified: true,
+      });
+      await user.save();
+    } else {
+      user.isVerified = true;
+      await user.save();
+    }
 
-    // TODO: Send code with Twilio or Email
+    const token = this.jwtService.sign({ sub: user._id, identifier });
 
-    return { message: 'Verification code sent.' };
+    // Fix for lines 74-75 (in verifyOtp method)
+    return {
+      message: 'Verification successful',
+      token,
+      user: {
+        id: user._id,
+        email: (user as any).email || null,
+        phone: (user as any).phone || null,
+        username: (user as any).username || null,
+        isVerified: user.isVerified
+      },
+    };
   }
 
-
-  async verify(dto: LoginDto) {
-    const user = await this.userModel.findOne({ identifier: dto.identifier });
-    if (!user || user.verificationCode !== dto.code)
-      throw new UnauthorizedException('Invalid code');
-
-    user.isVerified = true;
-    await user.save();
-
-    const token = this.jwtService.sign({ sub: user._id, identifier: user.identifier });
-    return { access_token: token };
-  }
-
-  
   async completeProfile(userId: string, dto: CompleteProfileDto) {
-    const existingUser = await this.userModel.findOne({ username: dto.username });
-    if (existingUser) throw new ConflictException('Username taken');
-
     const user = await this.userModel.findById(userId);
-    if (!user || !user.isVerified) throw new UnauthorizedException();
+    if (!user || !user.isVerified) {
+      throw new UnauthorizedException('User not verified');
+    }
+
+    const existingUsername = await this.userModel.findOne({ username: dto.username });
+    if (existingUsername) throw new ConflictException('Username already taken');
 
     user.username = dto.username;
     user.password = await bcrypt.hash(dto.password, 10);
 
+    // Generate wallet
+    const wallet = await this.walletService.generateWallet(user._id?.toString() ?? '');
+    user.suiWalletAddress = wallet?.address || undefined;
+
     await user.save();
 
-    // ⛓️ Call WalletService to generate Sui wallet
-    // You can inject WalletService and call:
-    // await this.walletService.generateWallet(user._id);
-
-    return { message: 'Profile completed. Wallet being created...' };
+    return { message: 'Profile completed', wallet };
   }
-
-
 
   async login(dto: LoginDto) {
-    const user = await this.userModel.findOne({ username: dto.identifier }).select('+password');
-    if (!user || !(await bcrypt.compare(dto.code, (user as any).password)))
-      throw new UnauthorizedException('Invalid credentials');
+    const user = await this.userModel
+      .findOne({ 
+        $or: [
+          { username: dto.identifier },
+          { email: dto.identifier },
+          { phone: dto.identifier }
+        ] 
+      })
+      .select('+password');
+    if (!user || !user.password)
+      throw new UnauthorizedException('Invalid login credentials');
 
-    return {
-      access_token: this.jwtService.sign({ sub: user._id, identifier: user.identifier }),
-    };
+    const isMatch = await bcrypt.compare(dto.code, user.password);
+    if (!isMatch) throw new UnauthorizedException('Invalid password');
+
+    const token = this.jwtService.sign({
+      sub: user._id,
+      identifier: (user as any).username || (user as any).email || (user as any).phone,
+    });
+
+    return { token };
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-//   async verify(dto: LoginDto) {
-//     const user = await this.userModel.findOne({ identifier: dto.identifier });
-//     if (!user || user.verificationCode !== dto.code)
-//       throw new UnauthorizedException('Invalid code');
-
-//     user.isVerified = true;
-//     await user.save();
-
-//     const payload = { sub: user._id, identifier: user.identifier };
-//     return { access_token: this.jwtService.sign(payload) };
-//   }
-// }
