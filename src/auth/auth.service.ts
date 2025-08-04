@@ -26,6 +26,7 @@ export class AuthService {
     private readonly walletService: WalletService,
   ) {}
 
+
   async register(dto: RegisterDto): Promise<{ message: string }> {
     const identifier = dto.email || dto.phone;
     const channel = dto.phone ? 'sms' : 'email';
@@ -41,6 +42,9 @@ export class AuthService {
 
     return { message: `Verification code sent to ${identifier}` };
   }
+
+
+
 
   async verifyOtp(dto: VerifyDto) {
     const { identifier, code } = dto;
@@ -66,7 +70,6 @@ export class AuthService {
 
     const token = this.jwtService.sign({ sub: user._id, identifier });
 
-    // Fix for lines 74-75 (in verifyOtp method)
     return {
       message: 'Verification successful',
       token,
