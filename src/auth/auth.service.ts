@@ -17,6 +17,10 @@ import { LoginDto } from './dto/login.dto';
 import { TwilioService } from '../auth/twilio/twilio.service';
 import { WalletService } from '../wallet/wallet.service';
 
+// Add these imports at the top
+import { BlacklistedToken, BlacklistedTokenDocument } from './schemas/blacklisted-token.schema';
+import { LogoutDto } from './dto/logout.dto';
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -24,6 +28,8 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly twilioService: TwilioService,
     private readonly walletService: WalletService,
+    // Add this to the constructor
+    @InjectModel(BlacklistedToken.name) private readonly blacklistedTokenModel: Model<BlacklistedTokenDocument>,
   ) {}
 
 
@@ -126,5 +132,30 @@ export class AuthService {
     });
 
     return { token };
+  }
+
+  // Add this method to the AuthService class
+  async logout(dto: LogoutDto): Promise<{ message: string }> {
+    try {
+      // Verify and decode the token
+      const decoded = this.jwtService.verify(dto.token);
+      
+      // Calculate expiration date from the token's exp claim
+      const expiresAt = new Date(decoded.exp * 1000);
+      
+      // Add token to blacklist
+      await this.blacklistedTokenModel.create({
+        token: dto.token,
+        expiresAt,
+      });
+      
+      return { message: 'Logout successful' };
+    } catch (error) {
+      if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+        // If token is invalid or already expired, just return success
+        return { message: 'Logout successful' };
+      }
+      throw error;
+    }
   }
 }

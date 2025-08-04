@@ -7,10 +7,14 @@ import { JwtModule } from '@nestjs/jwt';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { TwilioService } from './twilio/twilio.service';
 import { WalletService } from '../wallet/wallet.service';
+import { BlacklistedToken, BlacklistedTokenSchema } from './schemas/blacklisted-token.schema';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
+    MongooseModule.forFeature([
+      { name: User.name, schema: UserSchema },
+      { name: BlacklistedToken.name, schema: BlacklistedTokenSchema }
+    ]),
     JwtModule.register({
       secret: process.env.JWT_SECRET,
       signOptions: { expiresIn: process.env.JWT_EXPIRATION },
