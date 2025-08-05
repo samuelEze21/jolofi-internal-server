@@ -9,6 +9,7 @@ import { RegisterDto } from '../src/auth/dto/register.dto';
 import { VerifyDto } from '../src/auth/dto/verify.dto';
 import { CompleteProfileDto } from '../src/auth/dto/complete-profile.dto';
 import { LoginDto } from '../src/auth/dto/login.dto';
+import { LogoutDto } from '../src/auth/dto/logout.dto';
 
 // Mock bcrypt at the module level instead of using spyOn
 jest.mock('bcrypt', () => ({
@@ -25,6 +26,7 @@ describe('AuthService', () => {
   let mockJwtService: any;
   let mockTwilioService: any;
   let mockWalletService: any;
+  let mockBlacklistedTokenModel: any;
 
   beforeEach(async () => {
     // Create mock methods that will be used on the user instance
@@ -46,6 +48,7 @@ describe('AuthService', () => {
 
     mockJwtService = {
       sign: jest.fn().mockReturnValue('test-token'),
+      verify: jest.fn().mockReturnValue({ sub: 'user-id', exp: Math.floor(Date.now() / 1000) + 3600 }),
     };
 
     mockTwilioService = {
@@ -60,6 +63,11 @@ describe('AuthService', () => {
       }),
     };
 
+    mockBlacklistedTokenModel = {
+      create: jest.fn().mockResolvedValue(true),
+      findOne: jest.fn().mockResolvedValue(null),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
@@ -67,6 +75,7 @@ describe('AuthService', () => {
         { provide: JwtService, useValue: mockJwtService },
         { provide: TwilioService, useValue: mockTwilioService },
         { provide: WalletService, useValue: mockWalletService },
+        { provide: getModelToken('BlacklistedToken'), useValue: mockBlacklistedTokenModel },
       ],
     }).compile();
 
@@ -387,6 +396,74 @@ describe('AuthService', () => {
       expect(mockUserModel.findOne).toHaveBeenCalled();
       expect(bcrypt.compare).not.toHaveBeenCalled();
       expect(mockJwtService.sign).not.toHaveBeenCalled();
+    });
+  });
+
+
+  // 5. Logout function tests
+  describe('logout', () => {
+    it('should blacklist a valid token successfully', async () => {
+      // Arrange
+      const dto: LogoutDto = { token: 'valid-token' };
+      const decodedToken = { sub: 'user-id', exp: Math.floor(Date.now() / 1000) + 3600 };
+      mockJwtService.verify.mockReturnValue(decodedToken);
+      
+      // Act
+      const result = await service.logout(dto);
+      
+      // Assert
+      expect(mockJwtService.verify).toHaveBeenCalledWith('valid-token');
+      expect(mockBlacklistedTokenModel.create).toHaveBeenCalledWith({
+        token: 'valid-token',
+        expiresAt: expect.any(Date),
+      });
+      expect(result).toEqual({ message: 'Logout successful' });
+    });
+    
+    it('should handle invalid tokens gracefully', async () => {
+      // Arrange
+      const dto: LogoutDto = { token: 'invalid-token' };
+      mockJwtService.verify.mockImplementation(() => {
+        throw { name: 'JsonWebTokenError' };
+      });
+      
+      // Act
+      const result = await service.logout(dto);
+      
+      // Assert
+      expect(mockJwtService.verify).toHaveBeenCalledWith('invalid-token');
+      expect(mockBlacklistedTokenModel.create).not.toHaveBeenCalled();
+      expect(result).toEqual({ message: 'Logout successful' });
+    });
+    
+    it('should handle expired tokens gracefully', async () => {
+      // Arrange
+      const dto: LogoutDto = { token: 'expired-token' };
+      mockJwtService.verify.mockImplementation(() => {
+        throw { name: 'TokenExpiredError' };
+      });
+      
+      // Act
+      const result = await service.logout(dto);
+      
+      // Assert
+      expect(mockJwtService.verify).toHaveBeenCalledWith('expired-token');
+      expect(mockBlacklistedTokenModel.create).not.toHaveBeenCalled();
+      expect(result).toEqual({ message: 'Logout successful' });
+    });
+    
+    it('should propagate unexpected errors', async () => {
+      // Arrange
+      const dto: LogoutDto = { token: 'problematic-token' };
+      const unexpectedError = new Error('Unexpected error');
+      mockJwtService.verify.mockImplementation(() => {
+        throw unexpectedError;
+      });
+      
+      // Act & Assert
+      await expect(service.logout(dto)).rejects.toThrow(unexpectedError);
+      expect(mockJwtService.verify).toHaveBeenCalledWith('problematic-token');
+      expect(mockBlacklistedTokenModel.create).not.toHaveBeenCalled();
     });
   });
 });
