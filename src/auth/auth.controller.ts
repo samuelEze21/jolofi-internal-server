@@ -5,6 +5,7 @@ import { LoginDto } from './dto/login.dto';
 import { VerifyDto } from './dto/verify.dto';
 import { LogoutDto } from './dto/logout.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { CompleteProfileDto } from './dto/complete-profile.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -23,6 +24,12 @@ export class AuthController {
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('complete-profile')
+  completeProfile(@Request() req, @Body() dto: CompleteProfileDto) {
+    return this.authService.completeProfile(req.user.userId, dto);
   }
 
   @UseGuards(JwtAuthGuard)
