@@ -2,7 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AuthService } from '../src/auth/auth.service';
 import { getModelToken } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
-import { TwilioService } from '../src/auth/twilio/twilio.service';
+// import { TwilioService } from '../src/auth/twilio/twilio.service';
+import { FirebaseService } from '../src/auth/firebase/firebase.service';
 import { WalletService } from '../src/wallet/wallet.service';
 import { BadRequestException, ConflictException, UnauthorizedException } from '@nestjs/common';
 import { RegisterDto } from '../src/auth/dto/register.dto';
@@ -24,7 +25,7 @@ describe('AuthService', () => {
   let service: AuthService;
   let mockUserModel: any;
   let mockJwtService: any;
-  let mockTwilioService: any;
+  let mockFirebaseService: any;
   let mockWalletService: any;
   let mockBlacklistedTokenModel: any;
 
@@ -51,8 +52,9 @@ describe('AuthService', () => {
       verify: jest.fn().mockReturnValue({ sub: 'user-id', exp: Math.floor(Date.now() / 1000) + 3600 }),
     };
 
-    mockTwilioService = {
-      sendVerificationCode: jest.fn().mockResolvedValue({ status: 'pending' }),
+    mockFirebaseService = {
+      sendVerificationCode: jest.fn().mockResolvedValue({ message: 'Verification code sent to +1234567890' }),
+      sendEmailVerificationCode: jest.fn().mockResolvedValue({ message: 'Verification code sent to test@example.com' }),
       verifyCode: jest.fn().mockResolvedValue({ status: 'approved' }),
     };
 
@@ -73,7 +75,7 @@ describe('AuthService', () => {
         AuthService,
         { provide: getModelToken('User'), useValue: mockUserModel },
         { provide: JwtService, useValue: mockJwtService },
-        { provide: TwilioService, useValue: mockTwilioService },
+        { provide: FirebaseService, useValue: mockFirebaseService },
         { provide: WalletService, useValue: mockWalletService },
         { provide: getModelToken('BlacklistedToken'), useValue: mockBlacklistedTokenModel },
       ],
@@ -101,7 +103,7 @@ describe('AuthService', () => {
       expect(mockUserModel.findOne).toHaveBeenCalledWith({
         $or: [{ email: dto.email }, { phone: undefined }],
       });
-      expect(mockTwilioService.sendVerificationCode).toHaveBeenCalledWith('test@example.com', 'email');
+      expect(mockFirebaseService.sendEmailVerificationCode).toHaveBeenCalledWith('test@example.com');
       expect(result).toEqual({ message: 'Verification code sent to test@example.com' });
     });
 
@@ -117,7 +119,7 @@ describe('AuthService', () => {
       expect(mockUserModel.findOne).toHaveBeenCalledWith({
         $or: [{ email: undefined }, { phone: dto.phone }],
       });
-      expect(mockTwilioService.sendVerificationCode).toHaveBeenCalledWith('+1234567890', 'sms');
+      expect(mockFirebaseService.sendVerificationCode).toHaveBeenCalledWith('+1234567890');
       expect(result).toEqual({ message: 'Verification code sent to +1234567890' });
     });
 
@@ -128,7 +130,8 @@ describe('AuthService', () => {
       // Act & Assert
       await expect(service.register(dto)).rejects.toThrow(BadRequestException);
       expect(mockUserModel.findOne).not.toHaveBeenCalled();
-      expect(mockTwilioService.sendVerificationCode).not.toHaveBeenCalled();
+      expect(mockFirebaseService.sendVerificationCode).not.toHaveBeenCalled();
+      expect(mockFirebaseService.sendEmailVerificationCode).not.toHaveBeenCalled();
     });
 
     it('should throw ConflictException if user already exists', async () => {
@@ -139,7 +142,8 @@ describe('AuthService', () => {
       // Act & Assert
       await expect(service.register(dto)).rejects.toThrow(ConflictException);
       expect(mockUserModel.findOne).toHaveBeenCalled();
-      expect(mockTwilioService.sendVerificationCode).not.toHaveBeenCalled();
+      expect(mockFirebaseService.sendVerificationCode).not.toHaveBeenCalled();
+      expect(mockFirebaseService.sendEmailVerificationCode).not.toHaveBeenCalled();
     });
   });
 
@@ -164,7 +168,7 @@ describe('AuthService', () => {
       const result = await service.verifyOtp(dto);
 
       // Assert
-      expect(mockTwilioService.verifyCode).toHaveBeenCalledWith('test@example.com', '123456');
+      expect(mockFirebaseService.verifyCode).toHaveBeenCalledWith('test@example.com', '123456');
       expect(mockUserModel.findOne).toHaveBeenCalledWith({
         $or: [{ phone: 'test@example.com' }, { email: 'test@example.com' }],
       });
@@ -211,7 +215,7 @@ describe('AuthService', () => {
       const result = await service.verifyOtp(dto);
 
       // Assert
-      expect(mockTwilioService.verifyCode).toHaveBeenCalledWith('+1234567890', '123456');
+      expect(mockFirebaseService.verifyCode).toHaveBeenCalledWith('+1234567890', '123456');
       expect(mockUserModel.findOne).toHaveBeenCalledWith({
         $or: [{ phone: '+1234567890' }, { email: '+1234567890' }],
       });
