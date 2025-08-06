@@ -14,10 +14,9 @@ import { RegisterDto } from './dto/register.dto';
 import { VerifyDto } from './dto/verify.dto';
 import { CompleteProfileDto } from './dto/complete-profile.dto';
 import { LoginDto } from './dto/login.dto';
-import { TwilioService } from '../auth/twilio/twilio.service';
+import { FirebaseService } from '../auth/firebase/firebase.service';
 import { WalletService } from '../wallet/wallet.service';
 
-// Add these imports at the top
 import { BlacklistedToken, BlacklistedTokenDocument } from './schemas/blacklisted-token.schema';
 import { LogoutDto } from './dto/logout.dto';
 
@@ -26,9 +25,8 @@ export class AuthService {
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     private readonly jwtService: JwtService,
-    private readonly twilioService: TwilioService,
+    private readonly firebaseService: FirebaseService,
     private readonly walletService: WalletService,
-    // Add this to the constructor
     @InjectModel(BlacklistedToken.name) private readonly blacklistedTokenModel: Model<BlacklistedTokenDocument>,
   ) {}
 
@@ -44,23 +42,24 @@ export class AuthService {
     });
     if (existingUser) throw new ConflictException('User already exists');
 
-    await this.twilioService.sendVerificationCode(identifier, channel);
-
-    return { message: `Verification code sent to ${identifier}` };
+    // Use Firebase for both SMS and email verification
+    if (channel === 'sms') {
+      return await this.firebaseService.sendVerificationCode(identifier);
+    } else {
+      return await this.firebaseService.sendEmailVerificationCode(identifier);
+    }
   }
-
-
-
 
   async verifyOtp(dto: VerifyDto) {
     const { identifier, code } = dto;
-
-    const result: { status?: string; [key: string]: any } = await this.twilioService.verifyCode(identifier, code);
+    
+    // Use Firebase for both phone and email verification
+    const result = await this.firebaseService.verifyCode(identifier, code);
 
     let user = await this.userModel.findOne({
       $or: [{ phone: identifier }, { email: identifier }],
     });
-
+    
     if (!user) {
       user = new this.userModel({
         identifier,
@@ -134,7 +133,6 @@ export class AuthService {
     return { token };
   }
 
-  // Add this method to the AuthService class
   async logout(dto: LogoutDto): Promise<{ message: string }> {
     try {
       // Verify and decode the token

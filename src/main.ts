@@ -1,11 +1,13 @@
 // main.ts
+import * as dotenv from 'dotenv';
+// Load env variables first, before any other imports
+dotenv.config();
+
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import * as dotenv from 'dotenv';
 import { ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
-  dotenv.config();
   const app = await NestFactory.create(AppModule);
   
   // Enable CORS
