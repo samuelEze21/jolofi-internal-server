@@ -6,8 +6,10 @@ import { VerifyDto } from './dto/verify.dto';
 import { LogoutDto } from './dto/logout.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CompleteProfileDto } from './dto/complete-profile.dto';
+import { AuthThrottlerGuard } from '../common/guards/throttler.guard';
 
 @Controller('auth')
+@UseGuards(AuthThrottlerGuard)
 export class AuthController {
   constructor(private authService: AuthService) {}
 

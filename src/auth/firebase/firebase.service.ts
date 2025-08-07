@@ -40,6 +40,11 @@ export class FirebaseService implements OnModuleInit {
     }
   }
 
+  // Generate a random 6-digit verification code
+  private generateRandomCode(): string {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  }
+
   // Generate a verification code and send it to the phone number
   async sendVerificationCode(phoneNumber: string): Promise<{ message: string }> {
     try {
@@ -57,9 +62,13 @@ export class FirebaseService implements OnModuleInit {
         throw error;
       });
   
-      // For development/testing, use a fixed verification code
-      const testCode = "123456";
-      console.log(`TEST MODE: Use verification code ${testCode} for ${normalizedPhone}`);
+      // For development/testing, generate a random verification code
+      // In production, this would be sent via SMS using a service like Twilio
+      const testCode = process.env.NODE_ENV === 'development' ? this.generateRandomCode() : null;
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`TEST MODE: Use verification code ${testCode} for ${normalizedPhone}`);
+      }
       
       return { 
         message: `Verification code sent to ${normalizedPhone}`,
@@ -74,28 +83,21 @@ export class FirebaseService implements OnModuleInit {
   // Send email verification code
   async sendEmailVerificationCode(email: string): Promise<{ message: string }> {
     try {
-      // Create a user with the email if it doesn't exist
-      const userRecord = await this.adminApp.auth().createUser({
-        email,
-        emailVerified: false,
-      }).catch(error => {
-        // If user already exists, just continue
-        if (error.code === 'auth/email-already-exists') {
-          return this.adminApp.auth().getUserByEmail(email);
-        }
-        throw error;
-      });
-
-      // Generate a verification link
-      const actionCodeSettings = {
-        url: this.configService.get('EMAIL_VERIFICATION_REDIRECT_URL') || 'https://your-app-domain.com',
+      // Don't create a Firebase user, just send verification code
+      // Use Firebase Auth custom tokens or just the email sending capabilities
+      
+      // For development/testing, generate a random verification code
+      // In production, this would be sent via email
+      const testCode = process.env.NODE_ENV === 'development' ? this.generateRandomCode() : null;
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`TEST MODE: Use verification code ${testCode} for ${email}`);
+      }
+      
+      return { 
+        message: `Verification email sent to ${email}`,
+        ...(process.env.NODE_ENV === 'development' ? { testCode } : {})
       };
-      
-      // In a real implementation, we would send an email with a verification link
-      // For testing purposes, we'll simulate this by returning a success message
-      console.log(`Verification email would be sent to ${email} for user ${userRecord.uid}`);
-      
-      return { message: `Verification email sent to ${email}` };
     } catch (error) {
       console.error('Error sending email verification:', error);
       throw new BadRequestException(`Error sending email verification: ${error.message}`);
@@ -105,29 +107,9 @@ export class FirebaseService implements OnModuleInit {
   // Verify the code provided by the user
   async verifyCode(identifier: string, code: string): Promise<{ status: string }> {
     try {
-      // In a real implementation, the verification would be handled by the client SDK
-      // For testing purposes, we'll simulate a successful verification
+      // In a real implementation, verify the code without requiring a Firebase user
+      // For testing, simulate verification
       
-      // Check if identifier is a phone number or email
-      if (identifier.includes('+') || /^\d+$/.test(identifier)) {
-        // Normalize phone number
-        const normalizedPhone = this.normalizePhoneNumber(identifier);
-        
-        // Get the user by phone number
-        const userRecord = await this.adminApp.auth().getUserByPhoneNumber(normalizedPhone);
-        console.log(`Phone verification successful for user ${userRecord.uid}`);
-      } else {
-        // Get the user by email
-        const userRecord = await this.adminApp.auth().getUserByEmail(identifier);
-        
-        // Update the user's email verification status
-        await this.adminApp.auth().updateUser(userRecord.uid, {
-          emailVerified: true,
-        });
-        
-        console.log(`Email verification successful for user ${userRecord.uid}`);
-      }
-
       // If verification is successful, return status
       return { status: 'approved' };
     } catch (error) {
