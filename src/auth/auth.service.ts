@@ -34,19 +34,29 @@ export class AuthService {
   async register(dto: RegisterDto): Promise<{ message: string }> {
     const identifier = dto.email || dto.phone;
     const channel = dto.phone ? 'sms' : 'email';
-
+  
     if (!identifier) throw new BadRequestException('Email or phone is required');
-
-    const existingUser = await this.userModel.findOne({
-      $or: [{ email: dto.email }, { phone: dto.phone }],
-    });
-    if (existingUser) throw new ConflictException('User already exists');
-
-    // Use Firebase for both SMS and email verification
-    if (channel === 'sms') {
-      return await this.firebaseService.sendVerificationCode(identifier);
-    } else {
-      return await this.firebaseService.sendEmailVerificationCode(identifier);
+  
+    // Check MongoDB - ONLY check the identifier field
+    console.log('Checking for existing user with identifier:', identifier);
+    const existingUser = await this.userModel.findOne({ identifier });
+    console.log('Existing user found:', existingUser);
+    
+    if (existingUser) throw new ConflictException('User already exists in database');
+  
+    try {
+      // Use Firebase for both SMS and email verification
+      if (channel === 'sms') {
+        return await this.firebaseService.sendVerificationCode(identifier);
+      } else {
+        return await this.firebaseService.sendEmailVerificationCode(identifier);
+      }
+    } catch (error) {
+      // Handle Firebase errors properly
+      if (error.code === 'auth/email-already-exists' || error.code === 'auth/phone-number-already-exists') {
+        throw new ConflictException('User already exists in Firebase');
+      }
+      throw error;
     }
   }
 
@@ -55,34 +65,31 @@ export class AuthService {
     
     // Use Firebase for both phone and email verification
     const result = await this.firebaseService.verifyCode(identifier, code);
-
-    let user = await this.userModel.findOne({
-      $or: [{ phone: identifier }, { email: identifier }],
-    });
+  
+    // Find user by identifier field only
+    let user = await this.userModel.findOne({ identifier });
     
     if (!user) {
       user = new this.userModel({
         identifier,
-        phone: /^\d+$/.test(identifier) ? identifier : undefined,
-        email: identifier.includes('@') ? identifier : undefined,
         isVerified: true,
+        // Don't set phone or email fields as they don't exist in the schema
       });
       await user.save();
     } else {
       user.isVerified = true;
       await user.save();
     }
-
+  
     const token = this.jwtService.sign({ sub: user._id, identifier });
-
+  
     return {
       message: 'Verification successful',
       token,
       user: {
         id: user._id,
-        email: (user as any).email || null,
-        phone: (user as any).phone || null,
-        username: (user as any).username || null,
+        identifier: user.identifier,
+        username: user.username || null,
         isVerified: user.isVerified
       },
     };
@@ -114,8 +121,7 @@ export class AuthService {
       .findOne({ 
         $or: [
           { username: dto.identifier },
-          { email: dto.identifier },
-          { phone: dto.identifier }
+          { identifier: dto.identifier }
         ] 
       })
       .select('+password');
@@ -127,7 +133,7 @@ export class AuthService {
 
     const token = this.jwtService.sign({
       sub: user._id,
-      identifier: (user as any).username || (user as any).email || (user as any).phone,
+      identifier: user.identifier,
     });
 
     return { token };
