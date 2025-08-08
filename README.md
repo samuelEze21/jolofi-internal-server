@@ -1,48 +1,113 @@
-# 1. Clone the repository
-git clone https://github.com/samueleze21/jolofi-internal-gaming-server.git
+# Jolofi Internal Gaming Server
 
-cd jolofi-internal-gaming-server
+A NestJS-based internal gaming server API with authentication, wallet management, and comprehensive documentation.
 
-# 2. Install dependencies
-npm install
+## Features
 
-# 3. Set up your environment variables
-cp .env.example .env
-# Fill in values for MongoDB URI, SUI API endpoint, etc.
+- 🔐 **Authentication System** - Phone/Email registration with OTP verification
+- 💰 **Wallet Integration** - SUI blockchain wallet generation and management
+- 📚 **API Documentation** - Interactive Swagger/OpenAPI documentation
+- 🛡️ **Security** - JWT authentication, rate limiting, and token blacklisting
+- 🔥 **Firebase Integration** - SMS and email verification services
+- ⚡ **Real-time Features** - WebSocket support for live interactions
 
-# 4. Start the development server
-npm run start:dev
+## Quick Start
 
+### Prerequisites
 
+- Node.js (v16 or higher)
+- MongoDB
+- Firebase project (for authentication)
 
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+### Installation
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/samueleze21/jolofi-internal-gaming-server.git
+   cd jolofi-internal-gaming-server
+   ```
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
 
-## Description
+3. **Environment setup**
+   ```bash
+   cp .env.example .env
+   ```
+   Fill in the required environment variables:
+   ```env
+   MONGO_URI=your_mongodb_connection_string
+   JWT_SECRET=your_jwt_secret
+   JWT_EXPIRATION=7d
+   SUI_RPC=your_sui_rpc_endpoint
+   FIREBASE_PROJECT_ID=your_firebase_project_id
+   # Add other Firebase config variables
+   ```
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+4. **Start the development server**
+   ```bash
+   npm run start:dev
+   ```
 
-## Project setup
+## API Documentation
+
+Once the server is running, you can access the interactive API documentation:
+
+- **Swagger UI**: [http://localhost:3003/api/docs](http://localhost:3003/api/docs)
+- **OpenAPI JSON**: [http://localhost:3003/api/docs-json](http://localhost:3003/api/docs-json)
+
+The API documentation includes:
+- Complete endpoint descriptions
+- Request/response schemas
+- Authentication requirements
+- Interactive testing interface
+- Example requests and responses
+
+## API Endpoints
+
+### Authentication
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| POST | `/auth/register` | Register with email or phone | ❌ |
+| POST | `/auth/verify` | Verify OTP code | ❌ |
+| POST | `/auth/login` | Login with credentials | ❌ |
+| POST | `/auth/complete-profile` | Complete user profile | ✅ |
+| POST | `/auth/logout` | Logout and blacklist token | ✅ |
+
+### Authentication Flow
+
+1. **Register** - Submit email or phone number
+2. **Verify** - Enter OTP code received via SMS/email
+3. **Complete Profile** - Set username and password
+4. **Login** - Authenticate with credentials
+
+## Development
+
+### Available Scripts
+
+```bash
+# Development
+npm run start:dev          # Start with hot reload
+npm run start:debug        # Start in debug mode
+
+# Production
+npm run build              # Build the application
+npm run start:prod         # Start production server
+
+# Testing
+npm run test               # Run unit tests
+npm run test:e2e           # Run end-to-end tests
+npm run test:cov           # Run tests with coverage
+
+# Code Quality
+npm run lint               # Run ESLint
+npm run format             # Format code with Prettier
+```
+
+### Project Structure
 
 ```bash
 $ npm install

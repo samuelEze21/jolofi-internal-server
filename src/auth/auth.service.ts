@@ -16,7 +16,6 @@ import { CompleteProfileDto } from './dto/complete-profile.dto';
 import { LoginDto } from './dto/login.dto';
 import { FirebaseService } from '../auth/firebase/firebase.service';
 import { WalletService } from '../wallet/wallet.service';
-
 import { BlacklistedToken, BlacklistedTokenDocument } from './schemas/blacklisted-token.schema';
 import { LogoutDto } from './dto/logout.dto';
 
@@ -30,29 +29,30 @@ export class AuthService {
     @InjectModel(BlacklistedToken.name) private readonly blacklistedTokenModel: Model<BlacklistedTokenDocument>,
   ) {}
 
-
   async register(dto: RegisterDto): Promise<{ message: string }> {
     const identifier = dto.email || dto.phone;
-    const channel = dto.phone ? 'sms' : 'email';
-  
-    if (!identifier) throw new BadRequestException('Email or phone is required');
-  
-    // Check MongoDB - ONLY check the identifier field
-    console.log('Checking for existing user with identifier:', identifier);
-    const existingUser = await this.userModel.findOne({ identifier });
-    console.log('Existing user found:', existingUser);
     
-    if (existingUser) throw new ConflictException('User already exists in database');
-  
+    if (!identifier) {
+      throw new BadRequestException('Email or phone is required');
+    }
+
+    // Check if user already exists
+    const existingUser = await this.userModel.findOne({ identifier });
+    if (existingUser) {
+      throw new ConflictException('User already exists');
+    }
+
     try {
-      // Use Firebase for both SMS and email verification
-      if (channel === 'sms') {
-        return await this.firebaseService.sendVerificationCode(identifier);
+      // Use Firebase for verification
+      if (dto.phone) {
+        return await this.firebaseService.sendVerificationCode(dto.phone);
       } else {
-        return await this.firebaseService.sendEmailVerificationCode(identifier);
+        if (!dto.email) {
+            throw new BadRequestException('Email is required');
+        }
+        return await this.firebaseService.sendEmailVerificationCode(dto.email);
       }
     } catch (error) {
-      // Handle Firebase errors properly
       if (error.code === 'auth/email-already-exists' || error.code === 'auth/phone-number-already-exists') {
         throw new ConflictException('User already exists in Firebase');
       }
@@ -63,17 +63,16 @@ export class AuthService {
   async verifyOtp(dto: VerifyDto) {
     const { identifier, code } = dto;
     
-    // Use Firebase for both phone and email verification
+    // Use Firebase for verification
     const result = await this.firebaseService.verifyCode(identifier, code);
   
-    // Find user by identifier field only
+    // Find or create user
     let user = await this.userModel.findOne({ identifier });
     
     if (!user) {
       user = new this.userModel({
         identifier,
         isVerified: true,
-        // Don't set phone or email fields as they don't exist in the schema
       });
       await user.save();
     } else {
@@ -97,12 +96,18 @@ export class AuthService {
 
   async completeProfile(userId: string, dto: CompleteProfileDto) {
     const user = await this.userModel.findById(userId);
-    if (!user || !user.isVerified) {
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+    
+    if (!user.isVerified) {
       throw new UnauthorizedException('User not verified');
     }
 
     const existingUsername = await this.userModel.findOne({ username: dto.username });
-    if (existingUsername) throw new ConflictException('Username already taken');
+    if (existingUsername) {
+      throw new ConflictException('Username already taken');
+    }
 
     user.username = dto.username;
     user.password = await bcrypt.hash(dto.password, 10);
@@ -125,11 +130,19 @@ export class AuthService {
         ] 
       })
       .select('+password');
-    if (!user || !user.password)
-      throw new UnauthorizedException('Invalid login credentials');
+      
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    
+    if (!user.password) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
 
     const isMatch = await bcrypt.compare(dto.code, user.password);
-    if (!isMatch) throw new UnauthorizedException('Invalid password');
+    if (!isMatch) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
 
     const token = this.jwtService.sign({
       sub: user._id,
