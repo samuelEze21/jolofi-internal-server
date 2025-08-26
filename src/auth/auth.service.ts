@@ -112,15 +112,36 @@ export class AuthService {
     user.username = dto.username;
     user.password = await bcrypt.hash(dto.password, 10);
 
-    // Generate wallet
+    // Generate wallet and register with Sui contract
     const wallet = await this.walletService.generateWallet(user._id?.toString() ?? '');
     user.suiWalletAddress = wallet?.address || undefined;
 
+    // Save the user with the new wallet address
     await user.save();
 
-    return { message: 'Profile completed', wallet };
+    // Get initial wallet balance (optional)
+    let balance = BigInt(0);
+    if (wallet.address) {
+      try {
+        balance = await this.walletService.getWalletBalance(wallet.address);
+      } catch (error) {
+        // Log error but continue
+        console.error('Failed to get wallet balance:', error);
+      }
+    }
+
+    return { 
+      message: 'Profile completed', 
+      wallet: {
+        address: wallet.address,
+        balance: balance.toString()
+      }
+    };
   }
 
+
+
+  
   async login(dto: LoginDto) {
     const user = await this.userModel
       .findOne({ 
