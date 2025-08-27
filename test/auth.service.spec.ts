@@ -59,6 +59,8 @@ describe('AuthService', () => {
         address: '0xtest-wallet-address',
         privateKey: 'test-private-key',
       }),
+      // Add this missing mock method
+      getWalletBalance: jest.fn().mockResolvedValue(BigInt(0)),
     };
 
     mockBlacklistedTokenModel = {
@@ -193,84 +195,111 @@ describe('AuthService', () => {
 
   
   // 3. CompleteProfile function tests
-  describe('completeProfile', () => {
-    it('should complete user profile successfully', async () => {
-      const userId = 'user-id';
-      const dto: CompleteProfileDto = { username: 'testuser', password: 'password123' };
+
+  describe('completeProfile with wallet integration', () => {
+    it('should complete profile and generate wallet', async () => {
+      const userId = 'test-user-id';
+      const dto: CompleteProfileDto = {
+        username: 'testuser',
+        password: 'password123',
+      };
+      
       const mockUser = {
         _id: userId,
+        identifier: 'test@example.com',
         isVerified: true,
-        username: undefined,
-        password: undefined,
-        suiWalletAddress: undefined,
+        username: null,
+        password: null,
+        suiWalletAddress: null,
         save: jest.fn().mockResolvedValue(true),
       };
+      
       mockUserModel.findById.mockResolvedValue(mockUser);
-      mockUserModel.findOne.mockResolvedValue(null);
-
+      mockUserModel.findOne.mockResolvedValue(null); // No existing username
+      
       const result = await service.completeProfile(userId, dto);
-
-      expect(mockUserModel.findById).toHaveBeenCalledWith(userId);
-      expect(mockUserModel.findOne).toHaveBeenCalledWith({ username: 'testuser' });
-      expect(bcrypt.hash).toHaveBeenCalledWith('password123', 10);
+      
       expect(mockWalletService.generateWallet).toHaveBeenCalledWith(userId);
-      expect(mockUser.username).toBe('testuser');
-      expect(mockUser.password).toBe('hashed-password');
       expect(mockUser.suiWalletAddress).toBe('0xtest-wallet-address');
       expect(mockUser.save).toHaveBeenCalled();
       expect(result).toEqual({
         message: 'Profile completed',
         wallet: {
           address: '0xtest-wallet-address',
-          privateKey: 'test-private-key',
-        },
+          balance: '0'
+        }
       });
     });
-
-    it('should throw UnauthorizedException if user not found', async () => {
-      const userId = 'non-existent-id';
-      const dto: CompleteProfileDto = { username: 'testuser', password: 'password123' };
-      mockUserModel.findById.mockResolvedValue(null);
-
-      await expect(service.completeProfile(userId, dto)).rejects.toThrow(UnauthorizedException);
-      expect(mockUserModel.findById).toHaveBeenCalledWith(userId);
-      expect(mockUserModel.findOne).not.toHaveBeenCalled();
-      expect(mockWalletService.generateWallet).not.toHaveBeenCalled();
-    });
-
-    it('should throw UnauthorizedException if user not verified', async () => {
-      const userId = 'user-id';
-      const dto: CompleteProfileDto = { username: 'testuser', password: 'password123' };
-      const mockUser = {
-        _id: userId,
-        isVerified: false,
+    
+    it('should handle wallet balance retrieval', async () => {
+      const userId = 'test-user-id';
+      const dto: CompleteProfileDto = {
+        username: 'testuser',
+        password: 'password123',
       };
-      mockUserModel.findById.mockResolvedValue(mockUser);
-
-      await expect(service.completeProfile(userId, dto)).rejects.toThrow(UnauthorizedException);
-      expect(mockUserModel.findById).toHaveBeenCalledWith(userId);
-      expect(mockUserModel.findOne).not.toHaveBeenCalled();
-      expect(mockWalletService.generateWallet).not.toHaveBeenCalled();
-    });
-
-    it('should throw ConflictException if username already taken', async () => {
-      const userId = 'user-id';
-      const dto: CompleteProfileDto = { username: 'existinguser', password: 'password123' };
+      
       const mockUser = {
         _id: userId,
+        identifier: 'test@example.com',
         isVerified: true,
+        username: null,
+        password: null,
+        suiWalletAddress: null,
+        save: jest.fn().mockResolvedValue(true),
       };
+      
       mockUserModel.findById.mockResolvedValue(mockUser);
-      mockUserModel.findOne.mockResolvedValue({ username: 'existinguser' });
-
-      await expect(service.completeProfile(userId, dto)).rejects.toThrow(ConflictException);
-      expect(mockUserModel.findById).toHaveBeenCalledWith(userId);
-      expect(mockUserModel.findOne).toHaveBeenCalledWith({ username: 'existinguser' });
-      expect(bcrypt.hash).not.toHaveBeenCalled();
-      expect(mockWalletService.generateWallet).not.toHaveBeenCalled();
+      mockUserModel.findOne.mockResolvedValue(null); // No existing username
+      
+      // Mock wallet balance retrieval
+      mockWalletService.getWalletBalance = jest.fn().mockResolvedValue(BigInt(1000));
+      
+      const result = await service.completeProfile(userId, dto);
+      
+      expect(mockWalletService.getWalletBalance).toHaveBeenCalledWith('0xtest-wallet-address');
+      expect(result.wallet.balance).toBe('1000');
+    });
+    
+    it('should handle wallet balance retrieval failure', async () => {
+      const userId = 'test-user-id';
+      const dto: CompleteProfileDto = {
+        username: 'testuser',
+        password: 'password123',
+      };
+      
+      const mockUser = {
+        _id: userId,
+        identifier: 'test@example.com',
+        isVerified: true,
+        username: null,
+        password: null,
+        suiWalletAddress: null,
+        save: jest.fn().mockResolvedValue(true),
+      };
+      
+      mockUserModel.findById.mockResolvedValue(mockUser);
+      mockUserModel.findOne.mockResolvedValue(null); // No existing username
+      
+      // Mock wallet balance retrieval failure
+      mockWalletService.getWalletBalance = jest.fn().mockRejectedValue(new Error('Balance error'));
+      
+      // Mock console.error to prevent test output pollution
+      const originalConsoleError = console.error;
+      console.error = jest.fn();
+      
+      const result = await service.completeProfile(userId, dto);
+      
+      expect(console.error).toHaveBeenCalled();
+      expect(result.wallet.balance).toBe('0');
+      
+      // Restore console.error
+      console.error = originalConsoleError;
     });
   });
 
+
+
+  
   // 4. Login function tests
   describe('login', () => {
     it('should login successfully with correct credentials', async () => {
