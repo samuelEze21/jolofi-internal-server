@@ -1,0 +1,257 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  firebaseUid       String   @unique
+  email             String?  @unique
+  phoneNumber       String?  @unique
+  username          String?  @unique
+  profileImage      String?
+  
+  // Profile completion tracking
+  isEmailVerified   Boolean  @default(false)
+  isPhoneVerified   Boolean  @default(false)
+  isProfileComplete Boolean  @default(false)
+  isActive          Boolean  @default(true)
+  
+  // Timestamps
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  wallet            Wallet?
+  stakingMatches    StakingMatch[]
+  tournaments       Tournament[]
+  medals            Medal[]
+  gameResults       GameResult[]
+  notifications     Notification[]
+  iotDevices        IOTDevice[]
+
+  @@map("users")
+}
+
+model Wallet {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId       String   @unique @db.ObjectId
+  suiAddress   String   @unique
+  encryptedPrivateKey String
+  publicKey    String
+  encryptedMnemonic   String
+  balance      Float    @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  user                User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sentTransactions    Transaction[]     @relation("SentTransactions")
+  receivedTransactions Transaction[]    @relation("ReceivedTransactions")
+  stakingMatches      StakingMatch[]
+
+  @@map("wallets")
+}
+
+model Transaction {
+  id              String            @id @default(auto()) @map("_id") @db.ObjectId
+  fromWalletId    String?           @db.ObjectId
+  toWalletId      String?           @db.ObjectId
+  amount          Float
+  transactionHash String            @unique
+  type            TransactionType
+  status          TransactionStatus @default(PENDING)
+  metadata        Json?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  // Relations
+  fromWallet      Wallet?           @relation("SentTransactions", fields: [fromWalletId], references: [id])
+  toWallet        Wallet?           @relation("ReceivedTransactions", fields: [toWalletId], references: [id])
+
+  @@map("transactions")
+}
+
+model StakingMatch {
+  id          String             @id @default(auto()) @map("_id") @db.ObjectId
+  creatorId   String             @db.ObjectId
+  opponentId  String?            @db.ObjectId
+  walletId    String             @db.ObjectId
+  stakeAmount Float
+  gameType    String
+  status      StakingMatchStatus @default(WAITING)
+  winnerId    String?            @db.ObjectId
+  metadata    Json?
+  expiresAt   DateTime
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  // Relations
+  creator     User               @relation(fields: [creatorId], references: [id])
+  wallet      Wallet             @relation(fields: [walletId], references: [id])
+  gameResults GameResult[]
+
+  @@map("staking_matches")
+}
+
+model Tournament {
+  id              String           @id @default(auto()) @map("_id") @db.ObjectId
+  name            String
+  description     String?
+  entryFee        Float
+  prizePool       Float
+  maxParticipants Int
+  gameType        String
+  status          TournamentStatus @default(UPCOMING)
+  startDate       DateTime
+  endDate         DateTime
+  winnerId        String?          @db.ObjectId
+  metadata        Json?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  // Relations
+  participants    String[]         @db.ObjectId
+  gameResults     GameResult[]
+
+  @@map("tournaments")
+}
+
+model GameResult {
+  id              String        @id @default(auto()) @map("_id") @db.ObjectId
+  playerId        String        @db.ObjectId
+  stakingMatchId  String?       @db.ObjectId
+  tournamentId    String?       @db.ObjectId
+  score           Int
+  gameData        Json?
+  deviceId        String?
+  verificationHash String?
+  isVerified      Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relations
+  player          User          @relation(fields: [playerId], references: [id])
+  stakingMatch    StakingMatch? @relation(fields: [stakingMatchId], references: [id])
+  tournament      Tournament?   @relation(fields: [tournamentId], references: [id])
+
+  @@map("game_results")
+}
+
+model Medal {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String    @db.ObjectId
+  type        MedalType
+  name        String
+  description String?
+  imageUrl    String?
+  metadata    Json?
+  earnedAt    DateTime  @default(now())
+
+  // Relations
+  user        User      @relation(fields: [userId], references: [id])
+
+  @@map("medals")
+}
+
+model IOTDevice {
+  id           String           @id @default(auto()) @map("_id") @db.ObjectId
+  userId       String           @db.ObjectId
+  deviceId     String           @unique
+  deviceName   String
+  deviceType   String
+  publicKey    String
+  isActive     Boolean          @default(true)
+  lastSeen     DateTime?
+  firmware     String?
+  status       IOTDeviceStatus  @default(OFFLINE)
+  metadata     Json?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  // Relations
+  user         User             @relation(fields: [userId], references: [id])
+
+  @@map("iot_devices")
+}
+
+model Notification {
+  id        String           @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String           @db.ObjectId
+  title     String
+  message   String
+  type      NotificationType
+  isRead    Boolean          @default(false)
+  metadata  Json?
+  createdAt DateTime         @default(now())
+
+  // Relations
+  user      User             @relation(fields: [userId], references: [id])
+
+  @@map("notifications")
+}
+
+// Enums
+enum TransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  TRANSFER
+  STAKE
+  REWARD
+  TOURNAMENT_FEE
+  PRIZE
+}
+
+enum TransactionStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+  CANCELLED
+}
+
+enum StakingMatchStatus {
+  WAITING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  EXPIRED
+}
+
+enum TournamentStatus {
+  UPCOMING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum MedalType {
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+  SPECIAL
+  ACHIEVEMENT
+}
+
+enum IOTDeviceStatus {
+  ONLINE
+  OFFLINE
+  MAINTENANCE
+  ERROR
+}
+
+enum NotificationType {
+  SYSTEM
+  GAME
+  WALLET
+  TOURNAMENT
+  ACHIEVEMENT
+}
+
