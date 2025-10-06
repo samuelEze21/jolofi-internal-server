@@ -5,7 +5,6 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { JwtModule } from '@nestjs/jwt';
 import { JwtStrategy } from './strategies/jwt.strategy';
-// import { TwilioService } from './twilio/twilio.service';
 import { FirebaseService } from './firebase/firebase.service'; // Add this
 import { WalletService } from '../wallet/wallet.service';
 import { BlacklistedToken, BlacklistedTokenSchema } from './schemas/blacklisted-token.schema';
@@ -30,7 +29,6 @@ import { ConfigModule } from '@nestjs/config'; // Add this
   providers: [
     AuthService, 
     JwtStrategy, 
-    // TwilioService, 
     FirebaseService, // Add this
     WalletService
   ],
